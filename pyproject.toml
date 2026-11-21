@@ -1,0 +1,43 @@
+[project]
+name = "repurpose-agent"
+version = "0.1.0"
+description = "LangGraph multi-agent pipeline that turns any article into platform-ready social content"
+readme = "README.md"
+authors = [
+    { name = "Youssef Ben Cheikh", email = "bencheikhyoussef9@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "httpx>=0.28.1",
+    "langchain-anthropic>=1.7.12",
+    "langchain-core>=1.8.4",
+    "langgraph>=1.2.24",
+    "pydantic>=2",
+    "pydantic-settings>=2.16.3",
+    "rich>=15.0.0",
+    "typer>=0.29.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.21,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]
+
+[project.scripts]
+repurpose = "repurpose_agent.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
