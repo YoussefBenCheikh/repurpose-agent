@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     max_source_chars: int = 60_000
     http_timeout: float = 20.0
 
+    # Persistence: set to a Postgres URL to keep runs across restarts.
+    # Unset = in-memory (runs are lost when the process exits).
+    database_url: str | None = None
+
+    # API
+    cors_origins: list[str] = ["http://localhost:3000"]
+
 
 @lru_cache
 def get_settings() -> Settings:

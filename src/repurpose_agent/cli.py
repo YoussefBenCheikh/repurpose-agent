@@ -93,5 +93,19 @@ def run(
         console.print_json(data=result)
 
 
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option()] = "127.0.0.1",
+    port: Annotated[int, typer.Option()] = 8000,
+    reload: Annotated[bool, typer.Option()] = False,
+) -> None:
+    """Start the HTTP API (SSE streaming)."""
+    import uvicorn
+
+    uvicorn.run(
+        "repurpose_agent.api:app_factory", factory=True, host=host, port=port, reload=reload
+    )
+
+
 if __name__ == "__main__":
     app()
