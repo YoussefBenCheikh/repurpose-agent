@@ -8,11 +8,11 @@
 A **LangGraph multi-agent pipeline** that turns any article into platform-native posts for Pinterest, X and LinkedIn. It writes them, critiques them, rewrites them, and waits for your approval.
 
 ```
-START → ingest → analyze ─┬─► write (pinterest) ─┐
-                          ├─► write (x)          ├─► critique ──► human_review ──► END
-                          └─► write (linkedin)  ─┘      │   ▲           │
-                                ▲                       │   │           │
-                                └── score < 8 & budget ─┘   └─ revise ──┘
+START → ingest → analyze → brand_voice ─┬─► write (pinterest) ─┐
+                                        ├─► write (x)          ├─► critique ──► human_review ──► END
+                                        └─► write (linkedin)  ─┘      │   ▲           │
+                                              ▲                       │   │           │
+                                              └── score < 8 & budget ─┘   └─ revise ──┘
 ```
 
 ## What it shows
@@ -28,6 +28,7 @@ START → ingest → analyze ─┬─► write (pinterest) ─┐
 | **Durable runs**: Postgres checkpointer, so a run survives restarts | [`checkpoint.py`](src/repurpose_agent/checkpoint.py) |
 | **Live review UI** in Next.js: SSE stream parsed from `fetch`, per-platform feedback | [`web/`](web) |
 | **Demo mode**: a scripted LLM, so anyone can try it with no API key | [`demo.py`](src/repurpose_agent/demo.py) |
+| **RAG for brand voice**: past posts embedded locally, retrieved per platform (pgvector) | [`voice.py`](src/repurpose_agent/voice.py) |
 | **Observability**: per-run token and cost tracking, LangSmith tracing with run metadata | [`usage.py`](src/repurpose_agent/usage.py) |
 | **Eval suite**: rule checks (e.g. no invented numbers) + LLM-as-judge, gated in CI | [`evals/`](src/repurpose_agent/evals) |
 | **Testable agents**: the full graph and API run in CI against a fake LLM | [`tests/`](tests) |
@@ -107,6 +108,26 @@ CI runs the demo eval on every push and fails below a 100% rule pass rate. The
 `ANTHROPIC_API_KEY` repository secret, then trigger it from the Actions tab. A full run is
 about 50 model calls.
 
+## Brand voice (RAG)
+
+The `brand_voice` node embeds the article's key points and retrieves your most similar
+past posts for each platform. Writers get them as style examples ("match the tone and
+rhythm, never copy the facts"), and the critic flags drafts that don't sound like you.
+
+- **Embeddings** run locally with [fastembed](https://github.com/qdrant/fastembed)
+  (`BAAI/bge-small-en-v1.5`, downloaded once). No API key, no per-call cost.
+- **Storage** is in memory, or Postgres + **pgvector** (HNSW index, cosine distance)
+  when `REPURPOSE_DATABASE_URL` is set.
+- **Your posts**: edit [`brand/posts.json`](brand/posts.json) (loaded at startup), use
+  the Brand voice panel in the UI, or the CLI:
+
+```bash
+uv run repurpose brand add my-posts.jsonl       # {"platform": "x", "text": "..."} per line
+uv run repurpose brand search "postgres queues" -p linkedin
+```
+
+The shipped `brand/posts.json` is a sample voice; replace it with your own posts.
+
 ## Observability
 
 Every run gets a usage tracker (a LangChain callback carried in the LangGraph config),
@@ -138,6 +159,9 @@ including the critic calls that run in worker threads.
 | `REPURPOSE_MAX_REVISIONS` | `2` | Automatic rewrites per platform |
 | `REPURPOSE_DATABASE_URL` | unset | Postgres URL for durable runs (in-memory if unset) |
 | `REPURPOSE_DEMO` | `false` | Use the scripted demo LLM instead of Claude |
+| `REPURPOSE_VOICE_EXAMPLES` | `3` | Past posts retrieved per platform (0 disables) |
+| `REPURPOSE_BRAND_FILE` | `brand/posts.json` | Posts loaded into the voice store at startup |
+| `REPURPOSE_EMBEDDINGS` | `fastembed` | `fastembed` (local model) or `hash` (keyword, for tests) |
 
 ## Development
 
@@ -150,9 +174,11 @@ cd web && npm run lint && npm run build   # build includes type-checking
 ## Roadmap
 
 - [x] Ingest → analyze → parallel writers → critic loop → human review
-- [ ] Brand-voice RAG over past posts (pgvector)
+- [x] Brand-voice RAG over past posts (pgvector)
 - [x] FastAPI with SSE streaming of graph events
 - [x] Postgres checkpointer so a run can be resumed later
 - [x] Next.js review UI
 - [x] Eval suite (LLM-as-judge + rule checks) in CI
 - [x] Tracing (LangSmith) and per-run token/cost tracking
+- [ ] Voice-match criterion in the eval suite
+- [ ] Publish approved posts via platform APIs (scheduling)

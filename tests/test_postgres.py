@@ -10,6 +10,7 @@ from repurpose_agent.checkpoint import open_checkpointer
 from repurpose_agent.config import Settings
 from repurpose_agent.graph import build_graph
 from repurpose_agent.schemas import Platform
+from repurpose_agent.voice import BrandPost, open_voice_store
 
 from .fakes import FakeLLM
 
@@ -35,3 +36,18 @@ def test_run_survives_restart():
 
         graph.invoke(Command(resume={"approved": True}), config)
         assert graph.get_state(config).values["approved"] is True
+
+
+def test_pgvector_voice_store():
+    settings = Settings(database_url=DB_URL, embeddings="hash", brand_file=None)
+    tag = uuid.uuid4().hex  # keep this run's rows distinguishable
+    with open_voice_store(settings) as store:
+        before = store.count(Platform.X)
+        posts = [
+            BrandPost(platform="x", text=f"postgres queues are underrated {tag}"),
+            BrandPost(platform="x", text=f"my morning routine {tag}"),
+        ]
+        assert store.add(posts) == 2
+        assert store.add(posts[:1]) == 0  # unique (platform, md5(text))
+        assert store.count(Platform.X) == before + 2
+        assert store.search(f"postgres queue {tag}", Platform.X, k=1) == [posts[0].text]

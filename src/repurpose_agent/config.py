@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +25,13 @@ class Settings(BaseSettings):
     # Persistence: set to a Postgres URL to keep runs across restarts.
     # Unset = in-memory (runs are lost when the process exits).
     database_url: str | None = None
+
+    # Brand voice (RAG over past posts)
+    embeddings: Literal["fastembed", "hash"] = "fastembed"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dim: int = 384
+    voice_examples: int = 3  # past posts retrieved per platform
+    brand_file: Path | None = Path("brand/posts.json")  # seeded into the store at startup
 
     # Demo mode: scripted LLM, no API key needed (see demo.py)
     demo: bool = False

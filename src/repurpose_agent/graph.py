@@ -1,10 +1,12 @@
 """The LangGraph pipeline.
 
-START -> ingest -> analyze -> [write x N platforms, in parallel] -> critique
-                                     ^                               |
-                                     |-- score < pass & budget left -+
-                                     |                               v
-                                     +------- revise ------- human_review -> END
+START -> ingest -> analyze -> brand_voice -> [write x N, in parallel] -> critique
+                                                 ^                          |
+                                                 |-- score < pass & budget -+
+                                                 |                          v
+                                                 +------ revise ------ human_review -> END
+
+brand_voice retrieves similar past posts per platform (RAG) as style examples.
 """
 
 import json
@@ -29,6 +31,7 @@ from repurpose_agent.schemas import (
     ReviewDecision,
     SourceDocument,
 )
+from repurpose_agent.voice import VoiceStore
 
 
 def merge_dicts(left: dict | None, right: dict | None) -> dict:
@@ -47,6 +50,7 @@ class GraphState(TypedDict, total=False):
     drafts: Annotated[dict[Platform, Draft], merge_dicts]
     critiques: Annotated[dict[Platform, Critique], merge_dicts]
     feedback: Annotated[dict[Platform, str], merge_dicts]
+    voice: dict[Platform, list[str]]  # retrieved past posts, per platform
     pending: list[Platform]  # platforms that need a (re)write next
     approved: bool
 
@@ -56,6 +60,7 @@ class WriteTask(TypedDict):
     insights: KeyInsights
     previous: Draft | None
     feedback: str | None
+    examples: list[str]
 
 
 def _dump(model: Any) -> str:
@@ -66,6 +71,7 @@ def build_graph(
     llm: StructuredLLM,
     settings: Settings,
     checkpointer: BaseCheckpointSaver | None = None,
+    voice_store: VoiceStore | None = None,
 ):
     # ------------------------------------------------------------------ nodes
 
@@ -98,6 +104,17 @@ def build_graph(
         platforms = state.get("platforms") or list(Platform)
         return {"insights": insights, "platforms": platforms, "pending": platforms}
 
+    def brand_voice(state: GraphState) -> dict:
+        if voice_store is None or settings.voice_examples <= 0:
+            return {"voice": {}}
+        ins = state["insights"]
+        query = "\n".join([ins.summary, *ins.key_points])
+        return {
+            "voice": {
+                p: voice_store.search(query, p, settings.voice_examples) for p in state["platforms"]
+            }
+        }
+
     def write(task: WriteTask, config: RunnableConfig) -> dict:
         platform, prev = task["platform"], task["previous"]
         content = llm.generate(
@@ -108,6 +125,7 @@ def build_graph(
                 _dump(task["insights"]),
                 _dump(prev.content) if prev else None,
                 task["feedback"],
+                task["examples"],
             ),
             config,
         )
@@ -118,12 +136,15 @@ def build_graph(
     def critique(state: GraphState, config: RunnableConfig) -> dict:
         insights_json = _dump(state["insights"])
         targets = state["pending"]
+        voice = state.get("voice") or {}
 
         def review(p: Platform) -> Critique:
             return llm.generate(
                 Critique,
                 prompts.CRITIC_SYSTEM,
-                prompts.critic_prompt(str(p), insights_json, _dump(state["drafts"][p].content)),
+                prompts.critic_prompt(
+                    str(p), insights_json, _dump(state["drafts"][p].content), voice.get(p, [])
+                ),
                 config,  # passed explicitly: worker threads don't inherit the run context
             )
 
@@ -162,6 +183,7 @@ def build_graph(
     def send_writes(state: GraphState) -> list[Send]:
         drafts = state.get("drafts") or {}
         feedback = state.get("feedback") or {}
+        voice = state.get("voice") or {}
         return [
             Send(
                 "write",
@@ -170,6 +192,7 @@ def build_graph(
                     insights=state["insights"],
                     previous=drafts.get(p),
                     feedback=feedback.get(p) if p in drafts else None,
+                    examples=voice.get(p, []),
                 ),
             )
             for p in state["pending"]
@@ -186,13 +209,15 @@ def build_graph(
     g = StateGraph(GraphState)
     g.add_node("ingest", ingest)
     g.add_node("analyze", analyze)
+    g.add_node("brand_voice", brand_voice)
     g.add_node("write", write)
     g.add_node("critique", critique)
     g.add_node("human_review", human_review)
 
     g.add_edge(START, "ingest")
     g.add_edge("ingest", "analyze")
-    g.add_conditional_edges("analyze", send_writes, ["write"])
+    g.add_edge("analyze", "brand_voice")
+    g.add_conditional_edges("brand_voice", send_writes, ["write"])
     g.add_edge("write", "critique")
     g.add_conditional_edges("critique", after_critique, ["write", "human_review"])
     g.add_conditional_edges("human_review", after_review, ["write", END])

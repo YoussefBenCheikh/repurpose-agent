@@ -1,0 +1,38 @@
+[
+  {
+    "platform": "x",
+    "text": "I shipped my first SaaS with 11 services.\n\nI now run it on 2.\n\nHere's the thing nobody tells you: every service is a pager you carry."
+  },
+  {
+    "platform": "x",
+    "text": "Stop A/B testing your button color.\n\nTest your headline. Then your price. Then your onboarding.\n\nButton color is where good ideas go to hide."
+  },
+  {
+    "platform": "x",
+    "text": "Boring tech checklist:\n\n- Postgres\n- one server\n- a cron job\n- logs you actually read\n\nThat's the stack. Ship the product."
+  },
+  {
+    "platform": "linkedin",
+    "text": "I deleted our Kubernetes cluster last month.\n\nNot because Kubernetes is bad. Because we had 300 users and a team of two.\n\nWe moved to one VM and a managed database. Deploys went from 20 minutes to 2. Our bill dropped by half.\n\nHere's the thing: infrastructure should match the size of the problem, not the size of your ambition.\n\nWhat's one tool you adopted too early?"
+  },
+  {
+    "platform": "linkedin",
+    "text": "Our best feature came from a support ticket.\n\nA customer asked for a CSV export. Annoyed, I built it in an afternoon.\n\nIt is now the reason half our users upgrade.\n\nListen to the boring requests. They are usually the real ones.\n\nWhat request did you ignore that turned out to matter?"
+  },
+  {
+    "platform": "linkedin",
+    "text": "Three things I stopped doing as a solo founder:\n\n1. Writing a roadmap longer than six weeks.\n2. Building features nobody asked for twice.\n3. Checking revenue every hour.\n\nNone of them made the product better. All of them made me slower.\n\nWhat did you stop doing that helped?"
+  },
+  {
+    "platform": "pinterest",
+    "text": "Boring tech stack for solo founders: Postgres, one server, one cron job. A simple setup you can run alone, without pagers or surprise bills."
+  },
+  {
+    "platform": "pinterest",
+    "text": "SaaS pricing page checklist: three plans, one highlighted, prices visible, annual savings spelled out. Save this before your next launch."
+  },
+  {
+    "platform": "pinterest",
+    "text": "Solo founder weekly routine: build Monday to Wednesday, talk to users Thursday, write and ship notes Friday. A calm schedule that compounds."
+  }
+]

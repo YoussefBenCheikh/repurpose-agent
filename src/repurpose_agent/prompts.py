@@ -33,13 +33,25 @@ each issue should say what to change. A 10 means you would publish it unchanged;
 reserve 8+ for drafts that need no meaningful edits."""
 
 
+def voice_block(examples: list[str]) -> str:
+    posts = "\n".join(f"<post>\n{e}\n</post>" for e in examples)
+    return (
+        f"<brand_voice_examples>\n{posts}\n</brand_voice_examples>\n"
+        "These are past posts by the same author. Match their tone, rhythm, sentence "
+        "length, formatting and vocabulary. Never copy their content, facts or numbers."
+    )
+
+
 def writer_prompt(
     platform: str,
     insights_json: str,
     previous_json: str | None = None,
     feedback: str | None = None,
+    examples: list[str] | None = None,
 ) -> str:
     parts = [PLATFORM_GUIDES[platform], f"<insights>\n{insights_json}\n</insights>"]
+    if examples:
+        parts.append(voice_block(examples))
     if previous_json and feedback:
         parts.append(f"<previous_draft>\n{previous_json}\n</previous_draft>")
         parts.append(f"<feedback>\n{feedback}\n</feedback>")
@@ -49,15 +61,18 @@ def writer_prompt(
     return "\n\n".join(parts)
 
 
-def critic_prompt(platform: str, insights_json: str, draft_json: str) -> str:
-    return "\n\n".join(
-        [
-            PLATFORM_GUIDES[platform],
-            f"<insights>\n{insights_json}\n</insights>",
-            f"<draft>\n{draft_json}\n</draft>",
-            "Critique this draft.",
-        ]
-    )
+def critic_prompt(
+    platform: str, insights_json: str, draft_json: str, examples: list[str] | None = None
+) -> str:
+    parts = [PLATFORM_GUIDES[platform], f"<insights>\n{insights_json}\n</insights>"]
+    if examples:
+        parts.append(voice_block(examples))
+        parts.append(
+            "Also judge whether the draft sounds like the author of these examples; "
+            "list voice mismatches as issues."
+        )
+    parts += [f"<draft>\n{draft_json}\n</draft>", "Critique this draft."]
+    return "\n\n".join(parts)
 
 
 def analyst_prompt(title: str, text: str) -> str:

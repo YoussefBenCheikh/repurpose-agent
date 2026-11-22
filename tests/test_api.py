@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from repurpose_agent.api import create_app
 from repurpose_agent.checkpoint import memory_saver
 from repurpose_agent.config import Settings
+from repurpose_agent.voice import HashEmbedder, MemoryVoiceStore
 
 from .fakes import FakeLLM
 
@@ -22,7 +23,8 @@ def parse_sse(body: str) -> list[tuple[str, dict]]:
 
 @pytest.fixture
 def client():
-    app = create_app(FakeLLM(), Settings(cors_origins=[]), memory_saver())
+    store = MemoryVoiceStore(HashEmbedder())
+    app = create_app(FakeLLM(), Settings(cors_origins=[]), memory_saver(), store)
     with TestClient(app) as c:
         yield c
 
@@ -40,7 +42,7 @@ def test_run_streams_nodes_then_pauses_for_review(client):
 
     assert names[0] == "run" and names[-1] == "done"
     nodes = [d["node"] for e, d in events if e == "node"]
-    assert nodes[:2] == ["ingest", "analyze"] and nodes.count("write") == 3
+    assert nodes[:3] == ["ingest", "analyze", "brand_voice"] and nodes.count("write") == 3
     assert "review" in names
     assert events[-1][1]["status"] == "awaiting_review"
 
@@ -84,3 +86,19 @@ def test_validation_and_unknown_runs(client):
 def test_errors_are_sent_as_sse_event(client):
     events = parse_sse(client.post("/runs", json={"url": "http://127.0.0.1:9/nothing"}).text)
     assert events[-1][0] == "error"
+
+
+def test_brand_endpoints(client):
+    posts = [
+        {"platform": "x", "text": "postgres queues are underrated"},
+        {"platform": "x", "text": "my morning routine"},
+        {"platform": "linkedin", "text": "hiring lessons"},
+    ]
+    assert client.post("/brand/posts", json=posts).json() == {"added": 3}
+    assert client.post("/brand/posts", json=posts[:1]).json() == {"added": 0}
+    assert client.get("/brand/posts/count").json() == {"pinterest": 0, "x": 2, "linkedin": 1}
+    hits = client.get("/brand/search", params={"q": "postgres queue", "platform": "x", "k": 1})
+    assert hits.json() == ["postgres queues are underrated"]
+    assert (
+        client.post("/brand/posts", json=[{"platform": "tiktok", "text": "x"}]).status_code == 422
+    )

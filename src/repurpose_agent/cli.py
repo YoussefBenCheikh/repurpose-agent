@@ -16,8 +16,11 @@ from repurpose_agent.graph import build_graph
 from repurpose_agent.llm import AnthropicLLM
 from repurpose_agent.schemas import Platform
 from repurpose_agent.usage import UsageTracker, run_config
+from repurpose_agent.voice import load_posts, open_voice_store
 
 app = typer.Typer(add_completion=False, help="Turn any article into platform-ready posts.")
+brand = typer.Typer(help="Manage past posts used for brand-voice matching.")
+app.add_typer(brand, name="brand")
 console = Console()
 
 
@@ -55,8 +58,15 @@ def run(
         raise typer.BadParameter("Pass a URL or --text-file.")
 
     settings = get_settings()
-    llm = DemoLLM() if demo or settings.demo else AnthropicLLM(settings)
-    graph = build_graph(llm, settings)
+    if demo:
+        settings = settings.model_copy(update={"demo": True})
+    llm = DemoLLM() if settings.demo else AnthropicLLM(settings)
+    with open_voice_store(settings) as store:
+        _run(url, text_file, platform, out, llm, settings, store)
+
+
+def _run(url, text_file, platform, out, llm, settings, store) -> None:
+    graph = build_graph(llm, settings, voice_store=store)
     tracker = UsageTracker()
     config = run_config(str(uuid.uuid4()), tracker, source="cli")
 
@@ -164,6 +174,32 @@ def eval_cmd(
     if report.errors or report.rule_pass_rate < min_pass_rate:
         console.print(f"[red]Failed: pass rate {report.rule_pass_rate:.0%} < {min_pass_rate:.0%}")
         raise typer.Exit(1)
+
+
+@brand.command("add")
+def brand_add(file: Annotated[Path, typer.Argument(help="JSON list or JSONL of posts.")]) -> None:
+    """Add past posts ({"platform", "text"}) to the brand-voice store."""
+    settings = get_settings().model_copy(update={"brand_file": None})
+    with open_voice_store(settings) as store:
+        added = store.add(load_posts(file))
+    console.print(f"Added {added} new posts.")
+    if not settings.database_url:
+        console.print(
+            "[yellow]No REPURPOSE_DATABASE_URL set: posts were not persisted. "
+            "Put them in brand/posts.json instead.[/]"
+        )
+
+
+@brand.command("search")
+def brand_search(
+    query: str,
+    platform: Annotated[Platform, typer.Option("--platform", "-p")] = Platform.LINKEDIN,
+    k: int = 3,
+) -> None:
+    """Show which past posts would be retrieved for a query."""
+    with open_voice_store(get_settings()) as store:
+        for i, text in enumerate(store.search(query, platform, k), 1):
+            console.print(Panel(text, title=f"#{i}"))
 
 
 @app.command()

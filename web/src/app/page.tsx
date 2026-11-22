@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BrandVoice } from "@/components/BrandVoice";
 import { DraftCard } from "@/components/DraftCard";
 import { Timeline, type TimelineEntry } from "@/components/Timeline";
 import {
@@ -56,6 +57,17 @@ function describe({ node, update }: NodeUpdate): Omit<TimelineEntry, "id"> {
         label: `Extracted ${update.insights?.key_points.length ?? 0} key points`,
         detail: `Audience: ${update.insights?.audience}`,
       };
+    case "brand_voice": {
+      const found = Object.entries(update.voice ?? {}).filter(([, v]) => v && v.length);
+      return found.length
+        ? {
+            label: "Matched your brand voice",
+            detail: found
+              .map(([p, v]) => `${PLATFORM_LABEL[p as Platform]}: ${v!.length} past posts`)
+              .join(" · "),
+          }
+        : { label: "No past posts yet", detail: "Add some under Brand voice to match your style" };
+    }
     case "write": {
       const [p, d] = Object.entries(update.drafts ?? {})[0] as [Platform, { revision: number }];
       return {
@@ -268,6 +280,8 @@ export default function Home() {
               {busy ? "Agents working…" : "Generate posts"}
             </button>
           </section>
+
+          <BrandVoice />
 
           {timeline.length > 0 && (
             <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">

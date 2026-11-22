@@ -3,6 +3,9 @@
     POST /runs                     start a run      -> text/event-stream
     POST /runs/{thread_id}/resume  approve / revise -> text/event-stream
     GET  /runs/{thread_id}         current status, drafts and critiques
+    POST /brand/posts              add past posts for brand-voice retrieval
+    GET  /brand/posts/count        how many past posts are stored, per platform
+    GET  /brand/search?q=&platform= preview what retrieval returns
 
 SSE events: `run` (thread id), `node` (a node finished), `review` (paused,
 waiting for a human), `done` (final status), `error`.
@@ -30,6 +33,7 @@ from repurpose_agent.graph import build_graph
 from repurpose_agent.llm import AnthropicLLM, StructuredLLM
 from repurpose_agent.schemas import Platform, ReviewDecision
 from repurpose_agent.usage import UsageTracker, run_config
+from repurpose_agent.voice import BrandPost, VoiceStore, open_voice_store
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +84,7 @@ def create_app(
     llm: StructuredLLM | None = None,
     settings: Settings | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
+    voice_store: VoiceStore | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
 
@@ -87,11 +92,13 @@ def create_app(
     async def lifespan(app: FastAPI):
         with ExitStack() as stack:
             saver = checkpointer or stack.enter_context(open_checkpointer(settings))
+            store = voice_store or stack.enter_context(open_voice_store(settings))
             model = llm or (DemoLLM() if settings.demo else AnthropicLLM(settings))
-            app.state.graph = build_graph(model, settings, saver)
+            app.state.voice = store
+            app.state.graph = build_graph(model, settings, saver, store)
             yield
 
-    app = FastAPI(title="repurpose-agent", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="repurpose-agent", version="0.3.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -138,6 +145,19 @@ def create_app(
     @app.get("/health")
     def health() -> dict:
         return {"ok": True, "demo": settings.demo and llm is None}
+
+    @app.post("/brand/posts")
+    def add_brand_posts(posts: list[BrandPost], request: Request) -> dict:
+        return {"added": request.app.state.voice.add(posts)}
+
+    @app.get("/brand/posts/count")
+    def count_brand_posts(request: Request) -> dict[str, int]:
+        store: VoiceStore = request.app.state.voice
+        return {str(p): store.count(p) for p in Platform}
+
+    @app.get("/brand/search")
+    def search_brand(q: str, platform: Platform, request: Request, k: int = 3) -> list[str]:
+        return request.app.state.voice.search(q, platform, min(k, 10))
 
     @app.post("/runs")
     def start_run(body: RunRequest, request: Request) -> StreamingResponse:

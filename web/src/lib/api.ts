@@ -39,10 +39,11 @@ export type Usage = {
 };
 
 export type NodeUpdate = {
-  node: "ingest" | "analyze" | "write" | "critique" | "human_review";
+  node: "ingest" | "analyze" | "brand_voice" | "write" | "critique" | "human_review";
   update: {
     source?: { title: string; chars: number; truncated: boolean };
     insights?: { key_points: string[]; audience: string };
+    voice?: Partial<Record<Platform, string[]>>;
     drafts?: Drafts;
     critiques?: Critiques;
     pending?: Platform[];
@@ -78,6 +79,27 @@ export async function health(): Promise<{ ok: boolean; demo: boolean } | null> {
   } catch {
     return null;
   }
+}
+
+export async function brandCounts(): Promise<Partial<Record<Platform, number>> | null> {
+  try {
+    const res = await fetch(`${API_URL}/brand/posts/count`);
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function addBrandPosts(
+  posts: { platform: Platform; text: string }[],
+): Promise<{ added: number }> {
+  const res = await fetch(`${API_URL}/brand/posts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(posts),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
 }
 
 /** POST JSON and parse the text/event-stream response. */
