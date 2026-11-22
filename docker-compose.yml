@@ -2,12 +2,23 @@ services:
   api:
     build: .
     ports: ["8000:8000"]
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       REPURPOSE_DATABASE_URL: postgresql://postgres:postgres@db:5432/repurpose
+      REPURPOSE_DEMO: ${REPURPOSE_DEMO:-false}
     depends_on:
       db:
         condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    depends_on: [api]
 
   db:
     image: postgres:17

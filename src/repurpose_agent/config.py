@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Unset = in-memory (runs are lost when the process exits).
     database_url: str | None = None
 
+    # Demo mode: scripted LLM, no API key needed (see demo.py)
+    demo: bool = False
+
     # API
     cors_origins: list[str] = ["http://localhost:3000"]
 

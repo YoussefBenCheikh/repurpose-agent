@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 from repurpose_agent.config import get_settings
+from repurpose_agent.demo import DemoLLM
 from repurpose_agent.graph import build_graph
 from repurpose_agent.llm import AnthropicLLM
 from repurpose_agent.schemas import Platform
@@ -46,13 +47,15 @@ def run(
         Path | None, typer.Option("--out", "-o", help="Write approved JSON here.")
     ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+    demo: Annotated[bool, typer.Option(help="Use the scripted demo LLM (no API key).")] = False,
 ) -> None:
     logging.basicConfig(level=logging.INFO if verbose else logging.WARNING)
     if not url and not text_file:
         raise typer.BadParameter("Pass a URL or --text-file.")
 
     settings = get_settings()
-    graph = build_graph(AnthropicLLM(settings), settings)
+    llm = DemoLLM() if demo or settings.demo else AnthropicLLM(settings)
+    graph = build_graph(llm, settings)
     config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
     inputs: dict = {"url": url, "platforms": platform or list(Platform)}

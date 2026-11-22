@@ -25,6 +25,7 @@ from pydantic import BaseModel, HttpUrl, model_validator
 
 from repurpose_agent.checkpoint import open_checkpointer
 from repurpose_agent.config import Settings, get_settings
+from repurpose_agent.demo import DemoLLM
 from repurpose_agent.graph import build_graph
 from repurpose_agent.llm import AnthropicLLM, StructuredLLM
 from repurpose_agent.schemas import Platform, ReviewDecision
@@ -85,7 +86,8 @@ def create_app(
     async def lifespan(app: FastAPI):
         with ExitStack() as stack:
             saver = checkpointer or stack.enter_context(open_checkpointer(settings))
-            app.state.graph = build_graph(llm or AnthropicLLM(settings), settings, saver)
+            model = llm or (DemoLLM() if settings.demo else AnthropicLLM(settings))
+            app.state.graph = build_graph(model, settings, saver)
             yield
 
     app = FastAPI(title="repurpose-agent", version="0.2.0", lifespan=lifespan)
@@ -126,7 +128,7 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict:
-        return {"ok": True}
+        return {"ok": True, "demo": settings.demo and llm is None}
 
     @app.post("/runs")
     def start_run(body: RunRequest, request: Request) -> StreamingResponse:
