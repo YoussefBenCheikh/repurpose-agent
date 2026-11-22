@@ -12,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
@@ -192,4 +191,6 @@ def build_graph(
     g.add_conditional_edges("critique", after_critique, ["write", "human_review"])
     g.add_conditional_edges("human_review", after_review, ["write", END])
 
-    return g.compile(checkpointer=checkpointer or InMemorySaver())
+    from repurpose_agent.checkpoint import memory_saver  # local: checkpoint imports schemas
+
+    return g.compile(checkpointer=checkpointer or memory_saver())

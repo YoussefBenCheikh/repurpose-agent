@@ -10,6 +10,7 @@ import time
 
 from pydantic import BaseModel
 
+from repurpose_agent.evals.judge import JudgeScore
 from repurpose_agent.schemas import (
     Critique,
     KeyInsights,
@@ -38,6 +39,10 @@ class DemoLLM:
             return self._insights(user)
         if schema is Critique:
             return self._critique(user)
+        if schema is JudgeScore:
+            return JudgeScore(
+                rationale="Demo judge: fixed scores.", faithfulness=4, platform_fit=4, engagement=4
+            )
         insights = KeyInsights.model_validate_json(_between(user, "<insights>", "</insights>"))
         revised = "<feedback>" in user
         if schema is PinterestPin:
@@ -51,15 +56,15 @@ class DemoLLM:
     # ---------------------------------------------------------------- builders
 
     def _insights(self, user: str) -> KeyInsights:
-        title = re.search(r"<source title='(.*?)'>", user)
+        title = re.search(r"<source title=(['\"])(.*?)\1>", user)  # repr() picks either quote
         sents = _sentences(user)
         points = (sents * 3)[: max(3, min(5, len(sents)))]
-        topic = title.group(1) if title else "this topic"
+        topic = title.group(2) if title else "this topic"
         return KeyInsights(
             summary=" ".join(sents[:2]),
             audience="Builders and founders who want practical takeaways",
             key_points=points,
-            hooks=[f"What nobody tells you about {topic}", f"{topic}, in 60 seconds"],
+            hooks=[f"What nobody tells you about {topic}", f"{topic}: the short version"],
             tone="practical and upbeat",
         )
 

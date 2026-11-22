@@ -2,9 +2,9 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from langgraph.checkpoint.memory import InMemorySaver
 
 from repurpose_agent.api import create_app
+from repurpose_agent.checkpoint import memory_saver
 from repurpose_agent.config import Settings
 
 from .fakes import FakeLLM
@@ -22,7 +22,7 @@ def parse_sse(body: str) -> list[tuple[str, dict]]:
 
 @pytest.fixture
 def client():
-    app = create_app(FakeLLM(), Settings(cors_origins=[]), InMemorySaver())
+    app = create_app(FakeLLM(), Settings(cors_origins=[]), memory_saver())
     with TestClient(app) as c:
         yield c
 

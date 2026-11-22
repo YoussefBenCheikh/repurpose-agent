@@ -96,6 +96,69 @@ def run(
         console.print_json(data=result)
 
 
+@app.command("eval")
+def eval_cmd(
+    cases: Annotated[Path, typer.Option(help="Eval dataset.")] = Path("evals/cases.json"),
+    demo: Annotated[bool, typer.Option(help="Use the scripted demo LLM (no API key).")] = False,
+    judge: Annotated[bool, typer.Option(help="Also score drafts with an LLM judge.")] = True,
+    judge_model: Annotated[str | None, typer.Option(help="Defaults to REPURPOSE_MODEL.")] = None,
+    only: Annotated[list[str] | None, typer.Option(help="Run only these case ids.")] = None,
+    out: Annotated[Path, typer.Option(help="Where to write the JSON report.")] = Path(
+        "evals/results/latest.json"
+    ),
+    min_pass_rate: Annotated[float, typer.Option(help="Exit 1 below this rule pass rate.")] = 0.9,
+) -> None:
+    """Run the eval suite: rule checks + optional LLM-as-judge."""
+    import os
+
+    from rich.table import Table
+
+    from repurpose_agent.evals.runner import load_cases, run_eval
+
+    settings = get_settings()
+    dataset = [c for c in load_cases(cases) if not only or c.id in only]
+    if demo:
+        llm = judge_llm = DemoLLM(delay=0)
+        model_name = "demo"
+    else:
+        llm = AnthropicLLM(settings)
+        judge_settings = settings.model_copy(update={"model": judge_model or settings.model})
+        judge_llm = AnthropicLLM(judge_settings)
+        model_name = settings.model
+
+    with console.status(f"Running {len(dataset)} cases..."):
+        report = run_eval(dataset, llm, settings, judge_llm if judge else None, model_name)
+
+    table = Table(title="Eval results")
+    for col in ["case", "platform", "rev", "critic", "rules", "judge"]:
+        table.add_column(col)
+    for c in report.cases:
+        if c.error:
+            table.add_row(c.case_id, "[red]error[/]", "", "", "", c.error[:60])
+        for d in c.drafts:
+            failed = [r.rule for r in d.rules if not r.passed]
+            table.add_row(
+                c.case_id,
+                str(d.platform),
+                str(d.revisions),
+                str(d.critic_score),
+                "[green]ok[/]" if not failed else f"[red]{', '.join(failed)}[/]",
+                f"{d.judge.mean:.1f}" if d.judge else "-",
+            )
+    console.print(table)
+    console.print_json(data=report.summary())
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report.model_dump_json(indent=2))
+    if summary_file := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(summary_file, "a") as f:
+            f.write(report.to_markdown() + "\n")
+
+    if report.errors or report.rule_pass_rate < min_pass_rate:
+        console.print(f"[red]Failed: pass rate {report.rule_pass_rate:.0%} < {min_pass_rate:.0%}")
+        raise typer.Exit(1)
+
+
 @app.command()
 def serve(
     host: Annotated[str, typer.Option()] = "127.0.0.1",

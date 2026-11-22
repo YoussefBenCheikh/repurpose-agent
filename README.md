@@ -28,6 +28,7 @@ START → ingest → analyze ─┬─► write (pinterest) ─┐
 | **Durable runs**: Postgres checkpointer, so a run survives restarts | [`checkpoint.py`](src/repurpose_agent/checkpoint.py) |
 | **Live review UI** in Next.js: SSE stream parsed from `fetch`, per-platform feedback | [`web/`](web) |
 | **Demo mode**: a scripted LLM, so anyone can try it with no API key | [`demo.py`](src/repurpose_agent/demo.py) |
+| **Eval suite**: rule checks (e.g. no invented numbers) + LLM-as-judge, gated in CI | [`evals/`](src/repurpose_agent/evals) |
 | **Testable agents**: the full graph and API run in CI against a fake LLM | [`tests/`](tests) |
 
 ## Try it in 1 minute (no API key)
@@ -78,6 +79,33 @@ curl -N -X POST localhost:8000/runs -H 'content-type: application/json' \
 
 Interactive docs at http://localhost:8000/docs.
 
+## Evals
+
+```bash
+uv run repurpose eval --demo           # free: scripted LLM, rule checks + fixed judge
+uv run repurpose eval                  # real model + LLM judge (uses your API key)
+uv run repurpose eval --no-judge --only pricing-page
+```
+
+The dataset is [`evals/cases.json`](evals/cases.json): a few original articles, each with the
+terms the posts must mention. Each approved draft is scored two ways:
+
+| Rule check (deterministic) | What it catches |
+|---|---|
+| `no_invented_numbers` | stats or figures that aren't in the source |
+| `mentions_key_term` | drafts that drift off-topic |
+| `x_hook_has_no_hashtag` | hashtag spam in the hook post |
+| `linkedin_hook_fits_preview` | a hook that gets cut off by "see more" |
+| `linkedin_invites_comments` | posts that don't end with a question |
+| `pinterest_title_has_keyword` | titles that won't match a search |
+
+The **LLM judge** scores faithfulness, platform fit and engagement from 1 to 5 against a rubric.
+
+CI runs the demo eval on every push and fails below a 100% rule pass rate. The
+[Evals (Claude)](.github/workflows/evals.yml) workflow runs the real thing on demand: add an
+`ANTHROPIC_API_KEY` repository secret, then trigger it from the Actions tab. A full run is
+about 50 model calls.
+
 ## Configuration
 
 | Env var | Default | Meaning |
@@ -104,5 +132,5 @@ cd web && npm run lint && npm run build   # build includes type-checking
 - [x] FastAPI with SSE streaming of graph events
 - [x] Postgres checkpointer so a run can be resumed later
 - [x] Next.js review UI
-- [ ] Eval suite (LLM-as-judge + rule checks) in CI
+- [x] Eval suite (LLM-as-judge + rule checks) in CI
 - [ ] Tracing with LangSmith or Langfuse

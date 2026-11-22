@@ -1,0 +1,31 @@
+name: Evals (Claude)
+
+# Runs the full eval suite against the real model. Manual only, because it costs money.
+# Requires the ANTHROPIC_API_KEY repository secret.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model to evaluate
+        default: claude-opus-5-5
+      judge:
+        description: Also run the LLM judge
+        type: boolean
+        default: true
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      REPURPOSE_MODEL: ${{ inputs.model }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run repurpose eval ${{ inputs.judge && '--judge' || '--no-judge' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: evals/results/latest.json

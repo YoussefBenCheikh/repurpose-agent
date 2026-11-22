@@ -1,0 +1,26 @@
+[
+  {
+    "id": "postgres-queues",
+    "title": "You probably don't need Redis for your job queue",
+    "must_mention": ["postgres", "queue", "skip locked", "redis"],
+    "text": "Most early-stage SaaS apps add Redis the moment they need background jobs. It works, but it is one more service to deploy, monitor and pay for. If you already run Postgres, you can use it as a reliable job queue.\n\nThe trick is SELECT ... FOR UPDATE SKIP LOCKED. Each worker claims a row, locks it, and other workers simply skip it instead of waiting. That gives you safe concurrency with nothing but SQL.\n\nRetries become an UPDATE that pushes run_at into the future with exponential backoff. Scheduled jobs are rows with a run_at timestamp. Dead letters are rows with status = 'failed' after 5 attempts.\n\nIn our benchmarks a single Postgres instance handled about 2,000 jobs per second with 8 workers, which is far beyond what most products need in their first years. When you outgrow it, you will know, and migrating a queue is easier than you think.\n\nStart simple: one table, one index on (status, run_at), and a worker loop."
+  },
+  {
+    "id": "pricing-page",
+    "title": "Three pricing page mistakes that cost you customers",
+    "must_mention": ["pricing", "plan", "annual"],
+    "text": "Your pricing page is often the second most visited page on your site, yet most founders design it in an afternoon.\n\nMistake one: too many plans. When visitors see five tiers, they compare instead of deciding. Three plans, with one clearly highlighted as recommended, is usually enough.\n\nMistake two: hiding the price. 'Contact us' on every tier signals that the product is expensive and the sales process is slow. Show a starting price, even for enterprise.\n\nMistake three: making annual billing confusing. If you offer a discount for annual plans, show the monthly equivalent and the total saved, for example 'Save 20% with annual billing'.\n\nFix these three and run the page for 30 days before changing anything else, so you can measure the effect on conversions."
+  },
+  {
+    "id": "home-composting",
+    "title": "Composting in a small apartment",
+    "must_mention": ["compost", "apartment", "bokashi"],
+    "text": "You don't need a garden to compost. Apartment dwellers have two practical options: a worm bin and a bokashi bucket.\n\nA worm bin is a ventilated box with shredded cardboard and red wiggler worms. Fed with vegetable scraps, the worms turn waste into rich castings in about three months. Kept moist and out of direct sun, a bin does not smell.\n\nBokashi is a fermentation method. You layer food waste with a bran inoculated with microbes in an airtight bucket. Unlike worm bins, bokashi accepts cooked food, small amounts of meat and dairy. After two weeks the fermented waste can be buried in a planter or given to a community garden.\n\nWhichever you choose, start with a small container under the sink and a simple rule: if it grew, it can go in."
+  },
+  {
+    "id": "deep-work",
+    "title": "Protecting deep work on a remote team",
+    "must_mention": ["deep work", "meetings", "async"],
+    "text": "Remote teams often replace office interruptions with a steady stream of chat notifications and back-to-back video calls. The result is the same: no time for deep work.\n\nThree habits help. First, cluster meetings into one half of the day and keep the other half meeting-free for the whole team. Second, default to async updates: a short written status beats a 30 minute standup that interrupts everyone at once. Third, make response time expectations explicit, for example that chat messages can wait up to four hours unless marked urgent.\n\nThese rules only work if leaders follow them first. When a manager blocks focus time on their own calendar and respects others' blocks, the team follows."
+  }
+]
