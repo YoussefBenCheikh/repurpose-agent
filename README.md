@@ -94,7 +94,7 @@ Interactive docs at http://localhost:8000/docs.
 ```bash
 uv run pytest                    # Postgres test runs if TEST_DATABASE_URL is set
 uv run ruff check . && uv run ruff format .
-cd web && npm run lint && npx tsc --noEmit
+cd web && npm run lint && npm run build   # build includes type-checking
 ```
 
 ## Roadmap
