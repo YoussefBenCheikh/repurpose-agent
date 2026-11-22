@@ -31,6 +31,13 @@ export type Critiques = Partial<Record<Platform, Critique>>;
 
 export type RunStatus = "running" | "awaiting_review" | "completed";
 
+export type Usage = {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number | null;
+};
+
 export type NodeUpdate = {
   node: "ingest" | "analyze" | "write" | "critique" | "human_review";
   update: {
@@ -47,8 +54,8 @@ export type StreamEvent =
   | { event: "run"; data: { thread_id: string } }
   | { event: "node"; data: NodeUpdate }
   | { event: "review"; data: { drafts: Drafts; critiques: Critiques } }
-  | { event: "done"; data: { thread_id: string; status: RunStatus } }
-  | { event: "error"; data: { message: string } };
+  | { event: "done"; data: { thread_id: string; status: RunStatus; usage?: Usage } }
+  | { event: "error"; data: { message: string; usage?: Usage } };
 
 export type RunInput = {
   url?: string;

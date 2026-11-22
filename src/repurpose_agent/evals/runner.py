@@ -15,6 +15,7 @@ from repurpose_agent.evals.rules import RuleResult, check_draft
 from repurpose_agent.graph import build_graph
 from repurpose_agent.llm import StructuredLLM
 from repurpose_agent.schemas import Draft, Platform
+from repurpose_agent.usage import Usage, UsageTracker, run_config
 
 
 class EvalCase(BaseModel):
@@ -40,6 +41,7 @@ class DraftResult(BaseModel):
 class CaseResult(BaseModel):
     case_id: str
     seconds: float
+    usage: Usage = Usage()  # pipeline calls only; judge calls are not included
     drafts: list[DraftResult] = []
     error: str | None = None
 
@@ -80,6 +82,7 @@ class EvalReport(BaseModel):
             if drafts
             else 0,
             "judge": {k: round(v, 2) for k, v in self.judge_means().items()},
+            "usage": sum((c.usage for c in self.cases), Usage()).model_dump(),
         }
 
     def to_markdown(self) -> str:
@@ -115,7 +118,8 @@ def run_case(
 ) -> CaseResult:
     start = time.perf_counter()
     graph = build_graph(llm, settings, memory_saver())
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    tracker = UsageTracker()
+    config = run_config(str(uuid.uuid4()), tracker, source="eval", case_id=case.id)
     try:
         graph.invoke({"text": case.text, "title": case.title, "platforms": case.platforms}, config)
         graph.invoke(Command(resume={"approved": True}), config)
@@ -134,9 +138,19 @@ def run_case(
                     judge=judge_draft(judge, draft, case.text) if judge else None,
                 )
             )
-        return CaseResult(case_id=case.id, seconds=time.perf_counter() - start, drafts=results)
+        return CaseResult(
+            case_id=case.id,
+            seconds=time.perf_counter() - start,
+            drafts=results,
+            usage=tracker.summary(),
+        )
     except Exception as e:  # one bad case shouldn't hide the others' results
-        return CaseResult(case_id=case.id, seconds=time.perf_counter() - start, error=repr(e))
+        return CaseResult(
+            case_id=case.id,
+            seconds=time.perf_counter() - start,
+            error=repr(e),
+            usage=tracker.summary(),
+        )
 
 
 def run_eval(

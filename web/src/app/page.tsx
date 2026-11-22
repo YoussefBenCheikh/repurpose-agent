@@ -14,12 +14,33 @@ import {
   type NodeUpdate,
   type Platform,
   type StreamEvent,
+  type Usage,
 } from "@/lib/api";
 
 type Phase = "idle" | "running" | "review" | "done" | "error";
 type Source = "url" | "text";
 
 const names = (ps: Platform[]) => ps.map((p) => PLATFORM_LABEL[p]).join(", ");
+
+const EMPTY_USAGE: Usage = { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 };
+
+function addUsage(a: Usage, b?: Usage): Usage {
+  if (!b) return a;
+  return {
+    calls: a.calls + b.calls,
+    input_tokens: a.input_tokens + b.input_tokens,
+    output_tokens: a.output_tokens + b.output_tokens,
+    cost_usd: a.cost_usd === null || b.cost_usd === null ? null : a.cost_usd + b.cost_usd,
+  };
+}
+
+function formatUsage(u: Usage): string {
+  const tokens = u.input_tokens + u.output_tokens;
+  const k = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
+  const cost =
+    u.cost_usd === null ? "" : ` · ~$${u.cost_usd.toFixed(u.cost_usd < 0.01 ? 4 : 2)}`;
+  return `${u.calls} LLM calls · ${k} tokens${cost}`;
+}
 
 function describe({ node, update }: NodeUpdate): Omit<TimelineEntry, "id"> {
   switch (node) {
@@ -73,6 +94,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [server, setServer] = useState<{ ok: boolean; demo: boolean } | null | undefined>();
   const [runPlatforms, setRunPlatforms] = useState<Platform[]>([]);
+  const [usage, setUsage] = useState<Usage>(EMPTY_USAGE);
 
   const abort = useRef<AbortController | null>(null);
   const nextId = useRef(0);
@@ -101,9 +123,11 @@ export default function Home() {
         setCritiques(e.data.critiques);
         break;
       case "done":
+        setUsage((u) => addUsage(u, e.data.usage));
         setPhase(e.data.status === "completed" ? "done" : "review");
         break;
       case "error":
+        setUsage((u) => addUsage(u, e.data.usage));
         setError(e.data.message);
         setPhase("error");
         break;
@@ -130,6 +154,7 @@ export default function Home() {
     setTimeline([]);
     setFeedback({});
     setThreadId(null);
+    setUsage(EMPTY_USAGE);
     setRunPlatforms(platforms);
     const input =
       source === "url" ? { url: url.trim(), platforms } : { text, title: "Pasted text", platforms };
@@ -248,6 +273,11 @@ export default function Home() {
             <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
               <h2 className="mb-3 text-sm font-semibold text-zinc-500">Agent activity</h2>
               <Timeline entries={timeline} busy={busy} />
+              {usage.calls > 0 && (
+                <p className="mt-4 border-t border-zinc-100 pt-3 text-xs tabular-nums text-zinc-500">
+                  {formatUsage(usage)}
+                </p>
+              )}
             </section>
           )}
 

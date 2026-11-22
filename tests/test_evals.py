@@ -70,7 +70,7 @@ def test_dataset_loads_and_demo_eval_passes():
 
 def test_case_errors_are_reported_not_raised():
     class Broken:
-        def generate(self, schema, system, user):
+        def generate(self, schema, system, user, config=None):
             raise RuntimeError("boom")
 
     case = EvalCase(id="c", title="t", text="Some text " * 30, must_mention=["text"])

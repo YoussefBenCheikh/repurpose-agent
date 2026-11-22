@@ -29,6 +29,7 @@ from repurpose_agent.demo import DemoLLM
 from repurpose_agent.graph import build_graph
 from repurpose_agent.llm import AnthropicLLM, StructuredLLM
 from repurpose_agent.schemas import Platform, ReviewDecision
+from repurpose_agent.usage import UsageTracker, run_config
 
 log = logging.getLogger(__name__)
 
@@ -98,9 +99,12 @@ def create_app(
         allow_headers=["*"],
     )
 
-    def stream_run(request: Request, graph_input: Any, thread_id: str) -> StreamingResponse:
+    def stream_run(
+        request: Request, graph_input: Any, thread_id: str, phase: str
+    ) -> StreamingResponse:
         graph = request.app.state.graph
-        config = {"configurable": {"thread_id": thread_id}}
+        tracker = UsageTracker()
+        config = run_config(thread_id, tracker, phase=phase)
 
         # Sync generator: Starlette runs it in a worker thread, which suits the
         # sync graph (the critic node already parallelises with threads).
@@ -115,10 +119,15 @@ def create_app(
                             yield _sse("node", _summarize(node, update))
                 snap = graph.get_state(config)
                 status = _status(snap.values, bool(snap.interrupts), bool(snap.next))
-                yield _sse("done", {"thread_id": thread_id, "status": status})
+                yield _sse(
+                    "done", {"thread_id": thread_id, "status": status, "usage": tracker.summary()}
+                )
             except Exception as e:  # surface failures to the client instead of a dropped stream
                 log.exception("run %s failed", thread_id)
-                yield _sse("error", {"thread_id": thread_id, "message": str(e)})
+                yield _sse(
+                    "error",
+                    {"thread_id": thread_id, "message": str(e), "usage": tracker.summary()},
+                )
 
         return StreamingResponse(
             events(),
@@ -133,7 +142,7 @@ def create_app(
     @app.post("/runs")
     def start_run(body: RunRequest, request: Request) -> StreamingResponse:
         graph_input = body.model_dump(mode="json") | {"platforms": body.platforms}
-        return stream_run(request, graph_input, str(uuid.uuid4()))
+        return stream_run(request, graph_input, str(uuid.uuid4()), phase="start")
 
     @app.get("/runs/{thread_id}")
     def get_run(thread_id: str, request: Request) -> RunStatus:
@@ -158,7 +167,7 @@ def create_app(
         if not snap.interrupts:
             raise HTTPException(409, "Run is not waiting for review")
         decision = body.model_dump(mode="json")
-        return stream_run(request, Command(resume=decision), thread_id)
+        return stream_run(request, Command(resume=decision), thread_id, phase="resume")
 
     return app
 

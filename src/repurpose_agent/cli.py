@@ -15,6 +15,7 @@ from repurpose_agent.demo import DemoLLM
 from repurpose_agent.graph import build_graph
 from repurpose_agent.llm import AnthropicLLM
 from repurpose_agent.schemas import Platform
+from repurpose_agent.usage import UsageTracker, run_config
 
 app = typer.Typer(add_completion=False, help="Turn any article into platform-ready posts.")
 console = Console()
@@ -56,7 +57,8 @@ def run(
     settings = get_settings()
     llm = DemoLLM() if demo or settings.demo else AnthropicLLM(settings)
     graph = build_graph(llm, settings)
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    tracker = UsageTracker()
+    config = run_config(str(uuid.uuid4()), tracker, source="cli")
 
     inputs: dict = {"url": url, "platforms": platform or list(Platform)}
     if text_file:
@@ -88,7 +90,12 @@ def run(
 
     final = graph.get_state(config).values
     result = {str(p): d.model_dump(mode="json") for p, d in final["drafts"].items()}
-    console.print("[bold green]Approved.[/]")
+    u = tracker.summary()
+    cost = f"~${u.cost_usd:.4f}" if u.cost_usd is not None else "unknown cost"
+    console.print(
+        f"[bold green]Approved.[/] {u.calls} LLM calls, "
+        f"{u.input_tokens:,} in / {u.output_tokens:,} out tokens, {cost}"
+    )
     if out:
         out.write_text(json.dumps(result, indent=2, ensure_ascii=False))
         console.print(f"Saved to {out}")

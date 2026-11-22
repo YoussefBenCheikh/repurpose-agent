@@ -56,7 +56,9 @@ def test_resume_with_approval_completes(client):
     thread_id, _ = start(client)
     events = parse_sse(client.post(f"/runs/{thread_id}/resume", json={"approved": True}).text)
 
-    assert events[-1] == ("done", {"thread_id": thread_id, "status": "completed"})
+    event, data = events[-1]
+    assert event == "done" and data["status"] == "completed"
+    assert data["usage"]["calls"] == 0  # FakeLLM bypasses LangChain, so nothing is metered
     assert client.get(f"/runs/{thread_id}").json()["status"] == "completed"
     # a finished run can't be resumed again
     assert client.post(f"/runs/{thread_id}/resume", json={"approved": True}).status_code == 409

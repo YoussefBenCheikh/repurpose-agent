@@ -28,6 +28,7 @@ START → ingest → analyze ─┬─► write (pinterest) ─┐
 | **Durable runs**: Postgres checkpointer, so a run survives restarts | [`checkpoint.py`](src/repurpose_agent/checkpoint.py) |
 | **Live review UI** in Next.js: SSE stream parsed from `fetch`, per-platform feedback | [`web/`](web) |
 | **Demo mode**: a scripted LLM, so anyone can try it with no API key | [`demo.py`](src/repurpose_agent/demo.py) |
+| **Observability**: per-run token and cost tracking, LangSmith tracing with run metadata | [`usage.py`](src/repurpose_agent/usage.py) |
 | **Eval suite**: rule checks (e.g. no invented numbers) + LLM-as-judge, gated in CI | [`evals/`](src/repurpose_agent/evals) |
 | **Testable agents**: the full graph and API run in CI against a fake LLM | [`tests/`](tests) |
 
@@ -106,6 +107,27 @@ CI runs the demo eval on every push and fails below a 100% rule pass rate. The
 `ANTHROPIC_API_KEY` repository secret, then trigger it from the Actions tab. A full run is
 about 50 model calls.
 
+## Observability
+
+Every run gets a usage tracker (a LangChain callback carried in the LangGraph config),
+so token counts and estimated cost show up with no extra service:
+
+- the CLI prints them when a run finishes
+- the API includes them in each `done` event, and the web UI shows a running total
+- `repurpose eval` reports them per case and in the summary
+
+For full traces, set these in `.env` and every node and LLM call appears in
+[LangSmith](https://smith.langchain.com), tagged with the thread id and phase:
+
+```bash
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_PROJECT=repurpose-agent
+```
+
+This works because each node passes its `RunnableConfig` on to the model call,
+including the critic calls that run in worker threads.
+
 ## Configuration
 
 | Env var | Default | Meaning |
@@ -133,4 +155,4 @@ cd web && npm run lint && npm run build   # build includes type-checking
 - [x] Postgres checkpointer so a run can be resumed later
 - [x] Next.js review UI
 - [x] Eval suite (LLM-as-judge + rule checks) in CI
-- [ ] Tracing with LangSmith or Langfuse
+- [x] Tracing (LangSmith) and per-run token/cost tracking

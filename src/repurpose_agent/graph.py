@@ -11,6 +11,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, TypedDict
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
@@ -86,15 +87,18 @@ def build_graph(
             raise ValueError("Provide either 'url' or 'text'.")
         return {"source": doc}
 
-    def analyze(state: GraphState) -> dict:
+    def analyze(state: GraphState, config: RunnableConfig) -> dict:
         src = state["source"]
         insights = llm.generate(
-            KeyInsights, prompts.ANALYST_SYSTEM, prompts.analyst_prompt(src.title, src.text)
+            KeyInsights,
+            prompts.ANALYST_SYSTEM,
+            prompts.analyst_prompt(src.title, src.text),
+            config,
         )
         platforms = state.get("platforms") or list(Platform)
         return {"insights": insights, "platforms": platforms, "pending": platforms}
 
-    def write(task: WriteTask) -> dict:
+    def write(task: WriteTask, config: RunnableConfig) -> dict:
         platform, prev = task["platform"], task["previous"]
         content = llm.generate(
             DRAFT_SCHEMAS[platform],
@@ -105,12 +109,13 @@ def build_graph(
                 _dump(prev.content) if prev else None,
                 task["feedback"],
             ),
+            config,
         )
         revision = prev.revision + 1 if prev else 0
         draft = Draft(platform=platform, content=content, revision=revision)
         return {"drafts": {platform: draft}}
 
-    def critique(state: GraphState) -> dict:
+    def critique(state: GraphState, config: RunnableConfig) -> dict:
         insights_json = _dump(state["insights"])
         targets = state["pending"]
 
@@ -119,6 +124,7 @@ def build_graph(
                 Critique,
                 prompts.CRITIC_SYSTEM,
                 prompts.critic_prompt(str(p), insights_json, _dump(state["drafts"][p].content)),
+                config,  # passed explicitly: worker threads don't inherit the run context
             )
 
         with ThreadPoolExecutor(max_workers=len(targets) or 1) as pool:

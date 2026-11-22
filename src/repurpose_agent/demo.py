@@ -33,7 +33,7 @@ class DemoLLM:
     def __init__(self, delay: float = 0.6) -> None:
         self.delay = delay
 
-    def generate(self, schema: type[BaseModel], system: str, user: str):
+    def generate(self, schema: type[BaseModel], system: str, user: str, config=None):
         time.sleep(self.delay)
         if schema is KeyInsights:
             return self._insights(user)

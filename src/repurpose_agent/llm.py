@@ -5,6 +5,7 @@ from typing import Protocol, TypeVar
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.exceptions import OutputParserException
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ValidationError
 
 from repurpose_agent.config import Settings
@@ -15,7 +16,12 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class StructuredLLM(Protocol):
-    def generate(self, schema: type[T], system: str, user: str) -> T: ...
+    def generate(
+        self, schema: type[T], system: str, user: str, config: RunnableConfig | None = None
+    ) -> T:
+        """`config` is the node's RunnableConfig: pass it on so callbacks (usage
+        tracking, LangSmith tracing) see the call as part of the run."""
+        ...
 
 
 class AnthropicLLM:
@@ -37,14 +43,21 @@ class AnthropicLLM:
             model_kwargs={"extra_body": {"fallbacks": "default"}},
         )
 
-    def generate(self, schema: type[T], system: str, user: str) -> T:
+    def generate(
+        self, schema: type[T], system: str, user: str, config: RunnableConfig | None = None
+    ) -> T:
         structured = self.chat.with_structured_output(schema, method="json_schema")
         messages: list[tuple[str, str]] = [("system", system), ("user", user)]
         last_error: Exception | None = None
 
         for attempt in range(1, self.max_attempts + 1):
             try:
-                return structured.invoke(messages)  # type: ignore[return-value]
+                call_config: RunnableConfig = {
+                    **(config or {}),
+                    "run_name": schema.__name__,
+                    "metadata": {**(config or {}).get("metadata", {}), "attempt": attempt},
+                }
+                return structured.invoke(messages, config=call_config)  # type: ignore[return-value]
             except (ValidationError, OutputParserException) as e:
                 last_error = e
                 log.warning("%s failed validation (attempt %d): %s", schema.__name__, attempt, e)

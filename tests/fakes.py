@@ -41,8 +41,11 @@ class FakeLLM:
         self.calls: dict[str, int] = defaultdict(int)
         self.prompts: list[str] = []
         self._lock = threading.Lock()
+        self.configs: list = []
 
-    def generate(self, schema, system, user):
+    def generate(self, schema, system, user, config=None):
+        if config is not None:
+            self.configs.append(config)
         with self._lock:
             return self._generate(schema, user)
 
